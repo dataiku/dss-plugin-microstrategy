@@ -1,0 +1,51 @@
+/* This file is the descriptor for the Custom python exporter mstrio */
+{
+    /* Meta data for display purposes */
+    "meta" : {
+        "label" : "Custom exporter to MicroStrategy.",
+        "description" : "",
+        "icon" : "icon-visual_export_recipe"
+    },
+
+    /* if the exporter produces a file, use OUTPUT_TO_FILE. If the exporter manages the output completely, use MANAGES_OUTPUT. */
+    "exportBehavior" : "MANAGES_OUTPUT",
+
+
+    /* to get the exporter to appear as an option of 'prepare for download' in the export dialog, add options here */
+    "exportOptions": [
+         {
+            "label" : "MicroStrategy"
+        }
+    ],
+
+    /* The field "params" holds a list of all the params
+       for wich the user will be prompted for values:
+
+       The available parameter types are:
+       STRING, INT, DOUBLE, BOOLEAN, PASSWORD, SELECT, MAP, TEXTAREA
+    */
+
+    "params": [
+        {
+            "name": "MicroStrategy API",
+            "label": "Pre-set MicroStrategy API credentials",
+            "description": "Define MicroStrategy API credentials",
+            "type": "PRESET",
+            "parameterSetId": "microstrategy-api-credentials"
+        },
+        {
+            "name": "MicroStrategy Project",
+            "label": "Pre-set MicroStrategy project",
+            "description": "Define the MicroStrategy projects to use",
+            "type": "PRESET",
+            "parameterSetId": "microstrategy-project"
+        },
+        {
+            "name": "dataset_name",
+            "label": "Dataset (cube) name",
+            "description": "",
+            "type": "STRING",
+            "mandatory" : true
+        }
+    ]
+}

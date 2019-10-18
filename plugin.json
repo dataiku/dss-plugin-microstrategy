@@ -1,0 +1,43 @@
+{
+    // The identifier of the plugin.
+    // This must be globally unique, and only contain A-Za-z0-9_-
+    // BEWARE: Changing this value is a dangerous operation and
+    // needs manual administrator intervention to fix directory names
+    "id" : "dss-plugin-microstrategy",
+
+    // Version. It is highly recommended to use Semantic Versioning
+    "version" : "1.0.0",
+
+
+    // Meta data for display purposes
+    "meta" : {
+        // Name of this plugin that appears in the interface.
+        "label" : "Export to MicroStrategy",
+
+        "description" : "Export DSS datasets to MicroStrategy cubes.",
+        "author" : "Dataiku (Claude PERDIGOU)",
+
+        // The icon of a plugin must be one of the FontAwesome 3.1 icons
+        "icon" : "icon-forward",
+
+        "licenseInfo" : "Apache Software License",
+
+        // Support level
+        "supportLevel": "TIER2_SUPPORT",
+
+        // URL where the user can learn more about the plugin
+        "url" : "https://www.dataiku.com/dss/plugins/info/microstrategy.html",
+
+        // List of tags for filtering the list of plugins
+        "tags" : ["Connector", "Visualization"]
+    },
+    "params": [
+        {
+            "name": "base_url",
+            "label": "MicroStrategy API URL",
+            "type": "STRING",
+            "description": "This URL must end with \"/MicroStrategyLibrary/api\"",
+            "mandatory": true
+        }
+    ]
+}
