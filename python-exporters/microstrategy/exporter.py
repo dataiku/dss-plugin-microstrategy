@@ -116,7 +116,7 @@ class CustomExporter(Exporter):
     def write_row(self, row):
         row_obj = {}
         for (col, val) in zip(self.schema, row):
-            row_obj[col] = val
+            row_obj[col] = None if type(val)==float and np.isnan(val) else val
         self.row_buffer.append(row_obj)
 
         if len(self.row_buffer) > self.buffer_size:
