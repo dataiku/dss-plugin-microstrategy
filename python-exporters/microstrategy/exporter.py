@@ -57,6 +57,7 @@ class CustomExporter(Exporter):
 
 
     def open(self, schema):
+        self.dss_columns_types = get_dss_columns_types(schema)
         (self.schema, dtypes, parse_dates_columns) = dataiku.Dataset.get_dataframe_schema_st(schema["columns"])
 
         # Prevent problems when reading int
@@ -115,8 +116,10 @@ class CustomExporter(Exporter):
 
     def write_row(self, row):
         row_obj = {}
-        for (col, val) in zip(self.schema, row):
-            row_obj[col] = None if type(val)==float and np.isnan(val) else val
+        for (col, val, dtype) in zip(self.schema, row, self.dss_columns_types):
+            if (not val or (type(val)==float and np.isnan(val))) and dtype=='string':
+                val = ""
+            row_obj[col] = val
         self.row_buffer.append(row_obj)
 
         if len(self.row_buffer) > self.buffer_size:
@@ -138,3 +141,12 @@ class CustomExporter(Exporter):
         logger.info("Logging out.")
         r = requests.get(url = self.base_url+"/auth/logout", headers = {"X-MSTR-AuthToken": self.conn.auth_token}, cookies= self.conn.cookies)
         logger.info("Logout returned status {}".format(r.status_code))
+
+
+def get_dss_columns_types(schema):
+    columns = schema.get("columns", [])
+    columns_types = []
+    for column in columns:
+        column_type = column.get("type")
+        columns_types.append(column_type)
+    return columns_types
