@@ -120,32 +120,40 @@ class CustomExporter(Exporter):
 
 
     def write_row(self, row):
-        row_obj = {}
-        for (col, val, dtype) in zip(self.schema, row, self.dss_columns_types):
-            if (not val or (type(val)==float and np.isnan(val))) and dtype=='string':
-                val = ""
-            row_obj[col] = val
-        self.row_buffer.append(row_obj)
+        row_dict = {}
+        for (column_name, cell_value, dtype) in zip(self.schema, row, self.dss_columns_types):
+            if (not cell_value or (type(cell_value)==float and np.isnan(cell_value))) and dtype=='string':
+                cell_value = ""
+            if (type(cell_value)==float and np.isnan(cell_value)) and dtype=='boolean':
+                logger.error("Boolean column {} contains an empty cell".format(column_name))
+                raise ValueError(
+                    "There is an empty cell in the boolean column '{}'. ".format(column_name)
+                    + "Boolean columns can only contain true/false values."
+                )
+            row_dict[column_name] = cell_value
+        self.row_buffer.append(row_dict)
 
         if len(self.row_buffer) > self.buffer_size:
             logger.info("Sending 5000 rows to MicroStrategy.")
-            self.dataframe = pd.DataFrame(self.row_buffer)
-            try:
-                self.conn.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='add')
-            except Exception as e:
-                logger.exception("Dataset update issue:")
-                raise e
+            self.flush_data(self.row_buffer)
             self.row_buffer = []
 
 
     def close(self):
         logger.info("Sending {} final rows to MicroStrategy.".format(len(self.row_buffer)))
-        self.dataframe = pd.DataFrame(self.row_buffer)
-        self.conn.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='add')
+        self.flush_data(self.row_buffer)
 
         logger.info("Logging out.")
         r = requests.get(url = self.base_url+"/auth/logout", headers = {"X-MSTR-AuthToken": self.conn.auth_token}, cookies= self.conn.cookies)
         logger.info("Logout returned status {}".format(r.status_code))
+
+    def flush_data(self, rows):
+        self.dataframe = pd.DataFrame(rows)
+        try:
+            self.conn.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='add')
+        except Exception as error_message:
+            logger.exception("Dataset update issue: {}".format(error_message))
+            raise error_message
 
 
 def get_dss_columns_types(schema):
