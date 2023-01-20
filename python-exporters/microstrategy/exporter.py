@@ -45,13 +45,13 @@ class CustomExporter(Exporter):
         self.username = config["microstrategy_api"].get("username", None)
         self.password = config["microstrategy_api"].get("password",'')
 
-        if not (self.username and self.password and self.base_url):
+        if not (self.username and self.base_url):
             logger.error('Connection params: {}'.format(
                 {'username:': self.username,
                 'password:': '#' * len(self.password),
                 'base_url:': self.base_url})
             )
-            raise ValueError("username, password and base_url must be filled")
+            raise ValueError("username and base_url must be filled")
 
         self.conn = microstrategy.Connection(base_url=self.base_url, username=self.username, password=self.password, project_name=self.project_name)
 
