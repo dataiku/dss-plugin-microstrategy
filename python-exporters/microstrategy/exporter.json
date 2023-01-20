@@ -4,11 +4,7 @@
         "description": "",
         "icon": "icon-visual_export_recipe"
     },
-
-    /* if the exporter produces a file, use OUTPUT_TO_FILE. If the exporter manages the output completely, use MANAGES_OUTPUT. */
     "exportBehavior": "MANAGES_OUTPUT",
-
-    /* to get the exporter to appear as an option of 'prepare for download' in the export dialog, add options here */
     "exportOptions": [
          {
             "label": "MicroStrategy"
