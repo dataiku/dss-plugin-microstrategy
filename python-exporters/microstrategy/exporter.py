@@ -70,6 +70,11 @@ class CustomExporter(Exporter):
                 new_dtypes[k] = v
             dtypes = new_dtypes
 
+        if parse_dates_columns:
+            for date_column in parse_dates_columns:
+                date_column_name = self.schema[date_column]
+                dtypes[date_column_name] = 'datetime64[ns]'
+
         logger.info("Will create mstr dataset with dtypes = %s" % dtypes)
         self.dataframe = pd.DataFrame({k: pd.Series(dtype=dtypes[k]) for k in dtypes})
 
