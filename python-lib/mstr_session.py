@@ -34,7 +34,6 @@ class MstrSession(object):
 
     def get(self, url=None, headers=None, params=None):
         headers = headers or {}
-        print("ALX:get:url={}".format(url))
         response = requests.get(url=url, headers=headers, params=params, verify=self.requests_verify, auth=self.auth)
         return response
 
@@ -61,10 +60,6 @@ class MstrSession(object):
         response = self.get(url=url)
         assert_response_ok(response)
         projects_list = safe_json_extract(response, default=[])
-        # try:
-        #     projects_list = response.json()
-        # except Exception as error_message:
-        #     raise error_message
         return projects_list
 
     def search_cubes(self, project_id, dataset_name):
@@ -224,11 +219,6 @@ def assert_response_ok(response, can_raise=True):
             message = ""
             json_content = safe_json_extract(response, default={})
             message = json_content.get("message")
-            # try:
-            #     json_content = response.json()
-            #     message = json_content.get("message")
-            # except Exception as error:
-            #     logging.error("Error '{}' while decoding json".format(error))
             content = response.content
             if message:
                 error_message += ". " + message
