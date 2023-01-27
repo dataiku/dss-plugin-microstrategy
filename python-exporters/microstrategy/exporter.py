@@ -33,7 +33,7 @@ class CustomExporter(Exporter):
         """
         self.row_buffer = []
         self.buffer_size = 5000
-        logger.info("Starting MicroStrategy exporter v1.1.1")
+        logger.info("Starting MicroStrategy exporter v1.1.1-beta.3")
         # Plugin settings
         self.base_url = plugin_config.get("base_url", None)
         self.project_name = config["microstrategy_project"].get("project_name", None)
@@ -101,17 +101,10 @@ class CustomExporter(Exporter):
         if not self.project_id:
             raise ValueError("Project '{}' could not be found on this server.".format(self.project_name))
 
-        # Search for objects of type 3 (datasets/cubes) with the right name
-        response = requests.get(
-            url=self.base_url+"/searches/results",
-            headers={"X-MSTR-AuthToken": self.connection.auth_token, "X-MSTR-ProjectID": self.project_id},
-            cookies=self.connection.cookies, params={"name": self.dataset_name, "type": 3}
-        )
-        response.raise_for_status()
-        search_results = response.json()
+        self.dataset_id = self.get_dataset_id(self.project_id, self.dataset_name)
 
-        # No result, create a new dataset
-        if search_results["totalItems"] == 0:
+        if not self.dataset_id:
+            logger.info("Creating new dataset {}.".format(self.dataset_name))
             try:
                 self.dataset_id, newTableId = self.connection.create_dataset(
                     data_frame=self.dataframe, dataset_name=self.dataset_name, table_name=self.table_name
@@ -119,15 +112,31 @@ class CustomExporter(Exporter):
             except Exception as error_message:
                 logger.exception("Dataset creation issue: {}".format(error_message))
                 raise error_message
-        # Found exactly 1 result, fetch the dataset ID
-        elif search_results["totalItems"] == 1:
-            self.dataset_id = search_results["result"][0]["id"]
-        # Found more than 1 cube, fail
-        else:
-            raise RuntimeError('Found two datasets named {} on your MicroStrategy instance.'.format(self.dataset_name))
 
         # Replace data (drop existing) by sending the empty dataframe, with correct schema
         self.connection.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='replace')
+
+    def get_dataset_id(self, project_id, searched_dataset_name):
+        dataset_id = None
+        # Search for objects of type 3 (datasets/cubes) with the right name
+        response = requests.get(
+            url=self.base_url+"/searches/results",
+            headers={"X-MSTR-AuthToken": self.connection.auth_token, "X-MSTR-ProjectID": project_id},
+            cookies=self.connection.cookies, params={"type": 3}
+        )
+        response.raise_for_status()
+        search_results = response.json()
+        print("ALX:search_results={}".format(search_results))
+        results = search_results.get("result", [])
+        total_items = 0  # Keeping this for back compatibility, but can two datasets have the same name in a first place ?
+        for result in results:
+            dataset_name = result.get("name")
+            if dataset_name == searched_dataset_name:
+                dataset_id = result.get("id")
+                total_items = total_items + 1
+        if total_items > 1:
+            raise RuntimeError('Found more than one datasets named {} on your MicroStrategy instance.'.format(searched_dataset_name))
+        return dataset_id
 
     def write_row(self, row):
         row_dict = {}
