@@ -5,4 +5,4 @@
 - Fix issue with exporting datasets containing null values
 - Raise exception on boolean columns containing empty cells
 - Handle date columns
-
+- Fix cube refreshing impacting linked dossiers
