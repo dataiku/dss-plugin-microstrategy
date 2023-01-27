@@ -62,19 +62,33 @@ class MstrSession(object):
         projects_list = safe_json_extract(response, default=[])
         return projects_list
 
-    def search_cubes(self, project_id, dataset_name):
+    def get_dataset_id(self, project_id, searched_dataset_name):
+        dataset_id = None
+        match_found = False
+
         url = "{}/searches/results".format(self.server_url)
         response = self.get(
             url=url,
             headers=self.build_headers(project_id),
             params={
-                "name": dataset_name,
                 "type": 3
             }
         )
         assert_response_ok(response)
+
         search_results = safe_json_extract(response)
-        return search_results
+        datasets = search_results.get("result")
+
+        for dataset in datasets:
+            dataset_name = dataset.get("name")
+            if dataset_name == searched_dataset_name:
+                dataset_id = dataset.get("id")
+                if match_found:
+                    raise Exception("Found more than one dataset named {} on your MicroStrategy instance".format(searched_dataset_name))
+                else:
+                    match_found = True
+
+        return dataset_id
 
     def create_dataset(self, project_id, project_name, dataset_name, table_name, columns_names, columns_types):
         json = self.build_dataset_create_json(dataset_name, table_name, columns_names, columns_types, [])

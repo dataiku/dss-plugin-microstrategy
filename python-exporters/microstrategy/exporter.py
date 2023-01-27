@@ -65,21 +65,22 @@ class CustomExporter(Exporter):
         self.project_id = self.get_project_id(self.project_name)
 
         # Search for objects of type 3 (datasets/cubes) with the right name
-        search_results = self.session.search_cubes(self.project_id, self.dataset_name)
+        self.dataset_id = self.session.get_dataset_id(self.project_id, self.dataset_name)
 
         # No result, create a new dataset
-        if search_results["totalItems"] == 0:
+        if not self.dataset_id:
             try:
-                self.dataset_id = self.session.create_dataset(self.project_id, self.project_name, self.dataset_name, self.table_name, self.schema, self.dss_columns_types)
+                self.dataset_id = self.session.create_dataset(
+                    self.project_id,
+                    self.project_name,
+                    self.dataset_name,
+                    self.table_name,
+                    self.schema,
+                    self.dss_columns_types
+                )
             except Exception as error_message:
                 logger.exception("Dataset creation issue: {}".format(error_message))
                 raise error_message
-        # Found exactly 1 result, fetch the dataset ID
-        elif search_results["totalItems"] == 1:
-            self.dataset_id = search_results["result"][0]["id"]
-        # Found more than 1 cube, fail
-        else:
-            raise RuntimeError('Found two datasets named {} on your MicroStrategy instance.'.format(self.dataset_name))
 
         # Replace data (drop existing) by sending the empty dataframe, with correct schema
         self.session.update_dataset([], self.project_id, self.dataset_id, self.table_name, self.schema, self.dss_columns_types, update_policy='replace')
