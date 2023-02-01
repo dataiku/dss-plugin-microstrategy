@@ -65,10 +65,12 @@ class CustomExporter(Exporter):
         self.project_id = self.get_project_id(self.project_name)
 
         # Search for objects of type 3 (datasets/cubes) with the right name
+        logger.info("Searching for existing '{}' dataset in project '{}'.".format(self.dataset_name, self.project_id))
         self.dataset_id = self.session.get_dataset_id(self.project_id, self.dataset_name)
 
         # No result, create a new dataset
         if not self.dataset_id:
+            logger.info("Creating dataset '{}'".format(self.dataset_name))
             try:
                 self.dataset_id = self.session.create_dataset(
                     self.project_id,
