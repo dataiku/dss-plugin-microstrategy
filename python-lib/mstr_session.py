@@ -10,6 +10,10 @@ logging.basicConfig(level=logging.INFO, format='dss-plugin-microstrategy %(level
 logger = logging.getLogger()
 
 
+SEARCH_PATTERN_EXACT = 2
+OBJECT_TYPE_CUBE_DATASET = 3
+
+
 class MstrSession(object):
     def __init__(self, server_url, username, password):
         self.server_url = parse_server_url(server_url)
@@ -71,14 +75,16 @@ class MstrSession(object):
             url=url,
             headers=self.build_headers(project_id),
             params={
-                "type": 3
+                "name": "{}".format(searched_dataset_name),
+                "pattern": SEARCH_PATTERN_EXACT,
+                "type": OBJECT_TYPE_CUBE_DATASET
             }
         )
-        assert_response_ok(response)
+        assert_response_ok(response, context="searching for dataset '{}'".format(searched_dataset_name))
 
         search_results = safe_json_extract(response)
-        datasets = search_results.get("result")
-
+        datasets = search_results.get("result", [])
+        logger.info("Found {} datasets".format(len(datasets)))
         for dataset in datasets:
             dataset_name = dataset.get("name")
             if dataset_name == searched_dataset_name:
@@ -221,14 +227,15 @@ def convert_rows_to_data(rows, columns_types):
     return encoded_rows
 
 
-def assert_response_ok(response, can_raise=True):
+def assert_response_ok(response, context=None, can_raise=True):
     error_message = ""
+    error_context = " while {} ".format(context) if context else ""
     if not isinstance(response, requests.models.Response):
         error_message = "Did not return a valide response"
     else:
         status_code = response.status_code
         if status_code >= 400:
-            error_message = "Error {}".format(status_code)
+            error_message = "Error {}{}".format(status_code, error_context)
             json_content = ""
             message = ""
             json_content = safe_json_extract(response, default={})
