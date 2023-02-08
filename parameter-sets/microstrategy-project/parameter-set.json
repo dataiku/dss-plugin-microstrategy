@@ -4,16 +4,7 @@
         "description": "MicroStrategy projects that can be used by the exporter.",
         "icon": "icon-forward"
     },
-
-    /* if users are allowed to fill the values for an instance of this parameter
-    set directly in the plugin component using it, as opposed to only be allowed
-    to select already defined presets (default value, can be changed in plugin
-    settings)
-    */
     "defaultDefinableInline": false,
-
-    /* if users are allowed to define presets at the project level in addition
-    to the instance level (default value, can be changed in plugin settings) */
     "defaultDefinableAtProjectLevel": true,
     "pluginParams": [
     ],
