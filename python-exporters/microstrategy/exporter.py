@@ -13,6 +13,10 @@ logging.basicConfig(level=logging.INFO, format='dss-plugin-microstrategy %(level
 logger = logging.getLogger()
 
 
+SEARCH_PATTERN_EXACT = 2
+OBJECT_TYPE_CUBE_DATASET = 3
+
+
 class CustomExporter(Exporter):
     """
     The methods will be called like this:
@@ -88,7 +92,7 @@ class CustomExporter(Exporter):
 
         # Get a project list, search for our project in the list, get the project ID for future API calls.
         response = requests.get(url=self.base_url+"/projects", headers={"X-MSTR-AuthToken": self.connection.auth_token}, cookies=self.connection.cookies)
-        response.raise_for_status()
+        assert_response_ok(response, context="searching project id")
         try:
             projects_list = response.json()
         except Exception as error_message:
@@ -101,17 +105,10 @@ class CustomExporter(Exporter):
         if not self.project_id:
             raise ValueError("Project '{}' could not be found on this server.".format(self.project_name))
 
-        # Search for objects of type 3 (datasets/cubes) with the right name
-        response = requests.get(
-            url=self.base_url+"/searches/results",
-            headers={"X-MSTR-AuthToken": self.connection.auth_token, "X-MSTR-ProjectID": self.project_id},
-            cookies=self.connection.cookies, params={"name": self.dataset_name, "type": 3}
-        )
-        response.raise_for_status()
-        search_results = response.json()
+        self.dataset_id = self.get_dataset_id(self.project_id, self.dataset_name)
 
-        # No result, create a new dataset
-        if search_results["totalItems"] == 0:
+        if not self.dataset_id:
+            logger.info("Creating new dataset {}.".format(self.dataset_name))
             try:
                 self.dataset_id, newTableId = self.connection.create_dataset(
                     data_frame=self.dataframe, dataset_name=self.dataset_name, table_name=self.table_name
@@ -119,15 +116,38 @@ class CustomExporter(Exporter):
             except Exception as error_message:
                 logger.exception("Dataset creation issue: {}".format(error_message))
                 raise error_message
-        # Found exactly 1 result, fetch the dataset ID
-        elif search_results["totalItems"] == 1:
-            self.dataset_id = search_results["result"][0]["id"]
-        # Found more than 1 cube, fail
-        else:
-            raise RuntimeError('Found two datasets named {} on your MicroStrategy instance.'.format(self.dataset_name))
 
         # Replace data (drop existing) by sending the empty dataframe, with correct schema
         self.connection.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='replace')
+
+    def get_dataset_id(self, project_id, searched_dataset_name):
+        dataset_id = None
+        # Search for objects of type 3 (datasets/cubes) with the right name
+        logger.info("Searching for dataset '{}'".format(searched_dataset_name))
+        response = requests.get(
+            url=self.base_url+"/searches/results",
+            headers={"X-MSTR-AuthToken": self.connection.auth_token, "X-MSTR-ProjectID": project_id},
+            cookies=self.connection.cookies,
+            params={
+                "name": "{}".format(searched_dataset_name),
+                "pattern": SEARCH_PATTERN_EXACT,
+                "type": OBJECT_TYPE_CUBE_DATASET
+            }
+        )
+        assert_response_ok(response, context="searching for dataset '{}'".format(searched_dataset_name))
+        search_results = response.json()
+        results = search_results.get("result", [])
+        logger.info("Found {} candidates".format(len(results)))
+        total_items = 0  # Keeping this for back compatibility, but can two datasets have the same name in a first place ?
+        for result in results:
+            dataset_name = result.get("name")
+            if dataset_name == searched_dataset_name:
+                dataset_id = result.get("id")
+                total_items = total_items + 1
+        logger.info("Found {} matche(s)".format(total_items))
+        if total_items > 1:
+            raise RuntimeError('Found more than one datasets named {} on your MicroStrategy instance.'.format(searched_dataset_name))
+        return dataset_id
 
     def write_row(self, row):
         row_dict = {}
@@ -171,3 +191,38 @@ def get_dss_columns_types(schema):
         column_type = column.get("type")
         columns_types.append(column_type)
     return columns_types
+
+
+def assert_response_ok(response, context=None, can_raise=True):
+    error_message = ""
+    error_context = " while {} ".format(context) if context else ""
+
+    if not isinstance(response, requests.models.Response):
+        error_message = "Did not return a valide response"
+    else:
+        status_code = response.status_code
+        if status_code >= 400:
+            error_message = "Error {}{}".format(status_code, error_context)
+            json_content = ""
+            message = ""
+            json_content = safe_json_extract(response, default={})
+            message = json_content.get("message")
+            content = response.content
+            if message:
+                error_message += ". " + message
+            elif json_content:
+                error_message += ". " + json_content
+            logger.error(error_message)
+            logger.error(content)
+    if error_message and can_raise:
+        raise Exception(error_message)
+    return error_message
+
+
+def safe_json_extract(response, default=None):
+    json = default
+    try:
+        json = response.json()
+    except Exception as error_message:
+        logging.error("Error '{}' while decoding json".format(error_message))
+    return json
