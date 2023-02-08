@@ -41,6 +41,7 @@ class CustomExporter(Exporter):
         self.username = config["microstrategy_api"].get("username", None)
         self.password = config["microstrategy_api"].get("password", '')
         self.session = MstrSession(self.base_url, self.username, self.password)
+        self.project_id, self.folder_id = self.get_ui_browse_results(config)
 
         if not (self.username and self.base_url):
             logger.error('Connection params: {}'.format(
@@ -52,6 +53,16 @@ class CustomExporter(Exporter):
             )
             raise ValueError("username and base_url must be filled")
 
+    def get_ui_browse_results(self, config):
+        import json
+        folder_id = None
+        project_id = config.get("selected_project_id", None)
+        selected_folder_id = json.loads(config.get("selected_folder_id", "{}"))
+        folder_ids = selected_folder_id.get("ids")
+        if folder_ids:
+            folder_id = folder_ids[-1]
+        return project_id, folder_id
+
     def open(self, schema):
         self.dss_columns_types = get_dss_columns_types(schema)
         (self.schema, dtypes, parse_dates_columns) = dataiku.Dataset.get_dataframe_schema_st(schema["columns"])
@@ -62,7 +73,8 @@ class CustomExporter(Exporter):
         # if dtypes is not None:
 
         # Get a project list, search for our project in the list, get the project ID for future API calls.
-        self.project_id = self.get_project_id(self.project_name)
+        if not self.project_id:
+            self.project_id = self.session.get_project_id(self.project_name)
 
         # Search for objects of type 3 (datasets/cubes) with the right name
         logger.info("Searching for existing '{}' dataset in project '{}'.".format(self.dataset_name, self.project_id))
@@ -78,7 +90,8 @@ class CustomExporter(Exporter):
                     self.dataset_name,
                     self.table_name,
                     self.schema,
-                    self.dss_columns_types
+                    self.dss_columns_types,
+                    self.folder_id
                 )
             except Exception as error_message:
                 logger.exception("Dataset creation issue: {}".format(error_message))
@@ -86,17 +99,6 @@ class CustomExporter(Exporter):
 
         # Replace data (drop existing) by sending the empty dataframe, with correct schema
         self.session.update_dataset([], self.project_id, self.dataset_id, self.table_name, self.schema, self.dss_columns_types, update_policy='replace')
-
-    def get_project_id(self, project_name):
-        projects_list = self.session.get_project_list()
-        project_id = None
-        for project in projects_list:
-            if project["name"] == project_name:
-                project_id = project["id"]
-                return project_id
-
-        if not self.project_id:
-            raise ValueError("Project '{}' could not be found on this server.".format(self.project_name))
 
     def write_row(self, row):
         row_dict = {}

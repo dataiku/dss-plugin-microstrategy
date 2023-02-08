@@ -11,6 +11,9 @@
         }
     ],
 
+    "kind": "PYTHON",
+    "paramsPythonSetup": "browse_folder.py",
+
     "params": [
         {
             "name": "microstrategy_api",
@@ -25,6 +28,20 @@
             "description": "",
             "type": "PRESET",
             "parameterSetId": "microstrategy-project"
+        },
+        {
+            "name": "selected_project_id",
+            "label": "Select the project",
+            "description": "",
+            "type": "SELECT",
+            "getChoicesFromPython": true
+        },
+        {
+            "name": "selected_folder_id",
+            "label": "Select the folder",
+            "description": "",
+            "type": "SELECT",
+            "getChoicesFromPython": true
         },
         {
             "name": "dataset_name",

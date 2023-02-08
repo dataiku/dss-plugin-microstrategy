@@ -96,8 +96,49 @@ class MstrSession(object):
 
         return dataset_id
 
-    def create_dataset(self, project_id, project_name, dataset_name, table_name, columns_names, columns_types):
-        json = self.build_dataset_create_json(dataset_name, table_name, columns_names, columns_types, [])
+    def get_projects(self):
+        url = "{}/projects".format(self.server_url)
+        response = self.get(
+            url=url
+        )
+        search_result = safe_json_extract(response)
+        return search_result
+
+    def get_project_id(self, project_name):
+        projects_list = self.get_project_list()
+        project_id = None
+        for project in projects_list:
+            if project["name"] == project_name:
+                project_id = project["id"]
+                return project_id
+
+        if not project_id:
+            raise ValueError("Project '{}' could not be found on this server.".format(project_name))
+
+    def get_shared_folders(self, project_id):
+        if not project_id:
+            return []
+        url = "{}/folders/preDefined/7".format(self.server_url)
+        response = self.get(
+            url=url,
+            headers=self.build_headers(project_id)
+        )
+        search_result = safe_json_extract(response)
+        return search_result
+
+    def get_folder(self, project_id, parent_folder_id):
+        if not project_id:
+            return []
+        url = "{}/folders/{}".format(self.server_url, parent_folder_id)
+        response = self.get(
+            url=url,
+            headers=self.build_headers(project_id)
+        )
+        search_result = safe_json_extract(response)
+        return search_result
+
+    def create_dataset(self, project_id, project_name, dataset_name, table_name, columns_names, columns_types, folder_id=None):
+        json = self.build_dataset_create_json(dataset_name, table_name, columns_names, columns_types, [], folder_id=folder_id)
         url = "{}/datasets".format(self.server_url)
         headers = self.build_headers(project_id)
         response = self.post(url=url, headers=headers, json=json)
@@ -106,7 +147,7 @@ class MstrSession(object):
         datatset_id = json_response.get("datasetId")
         return datatset_id
 
-    def build_dataset_create_json(self, project_name, table_name, columns_names, columns_types, rows):
+    def build_dataset_create_json(self, project_name, table_name, columns_names, columns_types, rows, folder_id=None):
         table_dictionary = self.build_table_update_json(table_name, columns_names, columns_types, rows)
 
         attributes, metrics = self.build_attributes_and_metrics(table_name, columns_names, columns_types)
@@ -116,6 +157,8 @@ class MstrSession(object):
             "attributes": attributes,
             "metrics": metrics
         }
+        if folder_id:
+            dataset_dictionary["folderId"] = folder_id
         return dataset_dictionary
 
     def build_attributes_and_metrics(self, table_name, columns_names, columns_types):
