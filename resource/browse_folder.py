@@ -26,8 +26,8 @@ def do(payload, config, plugin_config, inputs):
     dataset_name = str(config.get("dataset_name", None)).replace(" (created by Dataiku DSS)", "") + " (created by Dataiku DSS)"
     dataset_id = ""  # the dataset id, obtained at creation or on update
     table_name = "dss_data"
-    username = config["microstrategy_api"].get("username", None)
-    password = config["microstrategy_api"].get("password", '')
+    username = config.get("microstrategy_api", {}).get("username", None)
+    password = config.get("microstrategy_api", {}).get("password", '')
 
     if parameter_name == "selected_project_id":
         session = MstrSession(base_url, username, password)
@@ -40,16 +40,18 @@ def do(payload, config, plugin_config, inputs):
             })
         return build_select_choices(choices)
     elif parameter_name == "selected_folder_id":
+        choices = []
         selected_project_id = config.get("selected_project_id")
-        if not selected_project_id:
-            return build_select_choices("Nothing for now")
+        if not selected_project_id and not project_name:
+            return build_select_choices("Select a project")
         saved_structure = json.loads(config.get("selected_folder_id", "{}"))
         selected_folder_name = saved_structure.get("names", [])
         selected_folder_id = saved_structure.get("ids", [])
         session = MstrSession(base_url, username, password)
+        if project_name:
+            selected_project_id = session.get_project_id(project_name)
         if not selected_folder_id:
             folders = session.get_shared_folders(selected_project_id)
-            choices
         else:
             folders = session.get_folder(selected_project_id, selected_folder_id[-1])
             choices = [{"label": "/".join(selected_folder_name), "value": config.get("selected_folder_id", "[]")}]
@@ -67,4 +69,6 @@ def do(payload, config, plugin_config, inputs):
                 "label": "🔙 {}".format("/".join(selected_folder_name[:-1])),
                 "value": "{}".format(json.dumps({"names": selected_folder_name[:-1], "ids": selected_folder_id[:-1]}))
             })
+        # if len(selected_folder_id) == 0:
+        #     choices = [{"label":"My Reports","value":None}] + choices
         return build_select_choices(choices)

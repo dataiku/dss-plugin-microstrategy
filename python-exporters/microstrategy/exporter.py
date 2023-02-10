@@ -40,7 +40,8 @@ class CustomExporter(Exporter):
         self.table_name = "dss_data"
         self.username = config["microstrategy_api"].get("username", None)
         self.password = config["microstrategy_api"].get("password", '')
-        self.session = MstrSession(self.base_url, self.username, self.password)
+        generate_verbose_logs = config.get("generate_verbose_logs", False)
+        self.session = MstrSession(self.base_url, self.username, self.password, generate_verbose_logs=generate_verbose_logs)
         self.project_id, self.folder_id = self.get_ui_browse_results(config)
 
         if not (self.username and self.base_url):
@@ -61,6 +62,8 @@ class CustomExporter(Exporter):
         folder_ids = selected_folder_id.get("ids")
         if folder_ids:
             folder_id = folder_ids[-1]
+        if config.get("destination", "my_reports") == "my_reports":
+            folder_id = None
         return project_id, folder_id
 
     def open(self, schema):
@@ -78,7 +81,7 @@ class CustomExporter(Exporter):
 
         # Search for objects of type 3 (datasets/cubes) with the right name
         logger.info("Searching for existing '{}' dataset in project '{}'.".format(self.dataset_name, self.project_id))
-        self.dataset_id = self.session.get_dataset_id(self.project_id, self.dataset_name)
+        self.dataset_id = self.session.get_dataset_id(self.project_id, self.dataset_name, folder_id=self.folder_id)
 
         # No result, create a new dataset
         if not self.dataset_id:
@@ -122,6 +125,14 @@ class CustomExporter(Exporter):
 
     def flush_data(self, rows):
         try:
+            # self.session.upload_multiple_rows(
+            #     rows,
+            #     self.project_id,
+            #     self.dataset_id,
+            #     self.table_name,
+            #     self.schema,
+            #     self.dss_columns_types
+            # )
             self.session.update_dataset(
                 rows,
                 self.project_id,

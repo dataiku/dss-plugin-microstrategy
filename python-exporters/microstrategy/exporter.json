@@ -34,13 +34,26 @@
             "label": "Select the project",
             "description": "",
             "type": "SELECT",
+            "visibilityCondition": false,
             "getChoicesFromPython": true
         },
         {
-            "name": "selected_folder_id",
-            "label": "Select the folder",
+            "name": "destination",
+            "label": "Destination",
             "description": "",
             "type": "SELECT",
+            "selectChoices":[
+                {"value": "shared_reports", "label": "Shared Reports"},
+                {"value": "my_reports", "label": "My Reports"}
+            ],
+            "defaultValue": "my_reports"
+        },
+        {
+            "name": "selected_folder_id",
+            "label": "Folder",
+            "description": "",
+            "type": "SELECT",
+            "visibilityCondition": "model.destination=='shared_reports'",
             "getChoicesFromPython": true
         },
         {
@@ -49,6 +62,13 @@
             "description": "",
             "type": "STRING",
             "mandatory": true
+        },
+        {
+            "name": "generate_verbose_logs",
+            "label": "Verbose logging",
+            "description": "(necessary for debugging mode)",
+            "type": "BOOLEAN",
+            "mandatory": false
         }
     ]
 }

@@ -15,12 +15,13 @@ OBJECT_TYPE_CUBE_DATASET = 3
 
 
 class MstrSession(object):
-    def __init__(self, server_url, username, password):
+    def __init__(self, server_url, username, password, generate_verbose_logs=False):
         self.server_url = parse_server_url(server_url)
         self.username = username
         self.password = password
         self.auth = None
         self.requests_verify = False
+        self.generate_verbose_logs = generate_verbose_logs
         auth_token, cookies = self.request_auth_token(username, password)
         self.auth = MstrAuth(auth_token, cookies)
 
@@ -51,36 +52,48 @@ class MstrSession(object):
         response = requests.patch(url=url, headers=headers, json=json, verify=self.requests_verify, auth=self.auth)
         return response
 
-    def update_dataset(self, rows, project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='replace'):
+    def update_dataset(self, rows, project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='replace', can_raise=True):
         url = "{}/datasets/{}/tables/{}".format(self.server_url, dataset_id, table_name)
         headers = self.build_headers(project_id, update_policy=update_policy)
         json = self.build_table_update_json(table_name, schema, dss_columns_types, rows)
         response = self.patch(url=url, headers=headers, json=json)
-        assert_response_ok(response)
+        assert_response_ok(response, generate_verbose_logs=self.generate_verbose_logs, can_raise=can_raise)
         return response
+
+    # def upload_multiple_rows(self, rows, project_id, dataset_id, table_name, schema, dss_columns_types):
+    #     logger.info("upload_multiple_rows:Uploading {}".format(len(rows)))
+    #     response = self.update_dataset(rows, project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='add', can_raise=False)
+    #     if response.status_code == 500 and "Mismatch columns" in response.content:
+    #         logger.warning("Mismatch in column, reverting to row by row upload")
+    #         for row in rows:
+    #             response = self.update_dataset([row], project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='add', can_raise=False)
 
     def get_project_list(self):
         url = "{}/projects".format(self.server_url)
         response = self.get(url=url)
-        assert_response_ok(response)
+        assert_response_ok(response, generate_verbose_logs=self.generate_verbose_logs)
         projects_list = safe_json_extract(response, default=[])
         return projects_list
 
-    def get_dataset_id(self, project_id, searched_dataset_name):
+    def get_dataset_id(self, project_id, searched_dataset_name, folder_id=None):
         dataset_id = None
         match_found = False
 
         url = "{}/searches/results".format(self.server_url)
+        params = {
+            "name": "{}".format(searched_dataset_name),
+            "pattern": SEARCH_PATTERN_EXACT,
+            "type": OBJECT_TYPE_CUBE_DATASET
+        }
+        if folder_id:
+            params["root"] = folder_id
+            params["getAncestors"] = True
         response = self.get(
             url=url,
             headers=self.build_headers(project_id),
-            params={
-                "name": "{}".format(searched_dataset_name),
-                "pattern": SEARCH_PATTERN_EXACT,
-                "type": OBJECT_TYPE_CUBE_DATASET
-            }
+            params=params
         )
-        assert_response_ok(response, context="searching for dataset '{}'".format(searched_dataset_name))
+        assert_response_ok(response, context="searching for dataset '{}'".format(searched_dataset_name), generate_verbose_logs=self.generate_verbose_logs)
 
         search_results = safe_json_extract(response)
         datasets = search_results.get("result", [])
@@ -88,6 +101,10 @@ class MstrSession(object):
         for dataset in datasets:
             dataset_name = dataset.get("name")
             if dataset_name == searched_dataset_name:
+                if folder_id:
+                    ancestor_id = self.get_ancestor_id(dataset)
+                    if ancestor_id != folder_id:
+                        continue
                 dataset_id = dataset.get("id")
                 if match_found:
                     raise Exception("Found more than one dataset named {} on your MicroStrategy instance".format(searched_dataset_name))
@@ -95,6 +112,14 @@ class MstrSession(object):
                     match_found = True
 
         return dataset_id
+
+    def get_ancestor_id(self, dataset):
+        ancestor_id = None
+        ancestors = dataset.get("ancestors", [])
+        if ancestors:
+            ancestor = ancestors[-1]
+            ancestor_id = ancestor.get("id")
+        return ancestor_id
 
     def get_projects(self):
         url = "{}/projects".format(self.server_url)
@@ -142,7 +167,7 @@ class MstrSession(object):
         url = "{}/datasets".format(self.server_url)
         headers = self.build_headers(project_id)
         response = self.post(url=url, headers=headers, json=json)
-        assert_response_ok(response)
+        assert_response_ok(response, generate_verbose_logs=self.generate_verbose_logs)
         json_response = safe_json_extract(response)
         datatset_id = json_response.get("datasetId")
         return datatset_id
@@ -270,7 +295,7 @@ def convert_rows_to_data(rows, columns_types):
     return encoded_rows
 
 
-def assert_response_ok(response, context=None, can_raise=True):
+def assert_response_ok(response, context=None, can_raise=True, generate_verbose_logs=False):
     error_message = ""
     error_context = " while {} ".format(context) if context else ""
     if not isinstance(response, requests.models.Response):
@@ -291,6 +316,8 @@ def assert_response_ok(response, context=None, can_raise=True):
             logger.error(error_message)
             logger.error(content)
     if error_message and can_raise:
+        if generate_verbose_logs:
+            logger.error("last requests url={}, body={}".format(response.request.url, response.request.body))
         raise Exception(error_message)
     return error_message
 
