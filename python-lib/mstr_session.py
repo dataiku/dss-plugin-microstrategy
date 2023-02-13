@@ -4,6 +4,7 @@ import json
 import pandas
 from base64 import b64encode
 from mstr_auth import MstrAuth
+from dateutil.parser import parse
 
 
 logging.basicConfig(level=logging.INFO, format='dss-plugin-microstrategy %(levelname)s - %(message)s')
@@ -284,7 +285,8 @@ def convert_rows_to_data(rows, columns_types):
                     item_value = ""
             elif item_type == "date":
                 if value_type != pandas._libs.tslibs.timestamps.Timestamp:
-                    item_value = None
+                    if not validate_date(item_value):
+                        item_value = None
                 else:
                     item_value = item_value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             elif item_type == "boolean":
@@ -333,3 +335,11 @@ def safe_json_extract(response, default=None):
 
 def parse_server_url(raw_url):
     return raw_url.strip("/")
+
+
+def validate_date(date_text):
+    try:
+        parse(date_text)
+    except Exception:
+        return False
+    return True
