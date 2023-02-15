@@ -30,7 +30,7 @@ class CustomExporter(Exporter):
         """
         self.row_buffer = []
         self.buffer_size = 5000
-        logger.info("Starting MicroStrategy exporter v1.1.1-beta.2")
+        logger.info("Starting MicroStrategy exporter v1.2.0-beta.1")
         # Plugin settings
         self.base_url = plugin_config.get("base_url", None)
         self.project_name = config["microstrategy_project"].get("project_name", None)
@@ -41,6 +41,7 @@ class CustomExporter(Exporter):
         self.username = config["microstrategy_api"].get("username", None)
         self.password = config["microstrategy_api"].get("password", '')
         generate_verbose_logs = config.get("generate_verbose_logs", False)
+        self.upload_session_id = None
         self.session = MstrSession(self.base_url, self.username, self.password, generate_verbose_logs=generate_verbose_logs)
         self.project_id, self.folder_id = self.get_ui_browse_results(config)
 
@@ -86,22 +87,18 @@ class CustomExporter(Exporter):
         # No result, create a new dataset
         if not self.dataset_id:
             logger.info("Creating dataset '{}'".format(self.dataset_name))
-            try:
-                self.dataset_id = self.session.create_dataset(
-                    self.project_id,
-                    self.project_name,
-                    self.dataset_name,
-                    self.table_name,
-                    self.schema,
-                    self.dss_columns_types,
-                    self.folder_id
-                )
-            except Exception as error_message:
-                logger.exception("Dataset creation issue: {}".format(error_message))
-                raise error_message
+            self.dataset_id = self.session.create_dataset(
+                self.project_id,
+                self.dataset_name,
+                self.table_name,
+                self.schema,
+                self.dss_columns_types,
+                self.folder_id
+            )
 
         # Replace data (drop existing) by sending the empty dataframe, with correct schema
         self.session.update_dataset([], self.project_id, self.dataset_id, self.table_name, self.schema, self.dss_columns_types, update_policy='replace')
+        self.upload_session_id = self.session.open_upload_session(self.project_id, self.dataset_id, self.table_name, schema, self.dss_columns_types, update_policy='replace', can_raise=True)
 
     def write_row(self, row):
         row_dict = {}
@@ -112,7 +109,7 @@ class CustomExporter(Exporter):
         self.row_buffer.append(row_dict)
 
         if len(self.row_buffer) > self.buffer_size:
-            logger.info("Sending 5000 rows to MicroStrategy.")
+            logger.info("Sending {} rows to MicroStrategy.".format(self.buffer_size))
             self.flush_data(self.row_buffer)
             self.row_buffer = []
 
@@ -120,27 +117,14 @@ class CustomExporter(Exporter):
         logger.info("Sending {} final rows to MicroStrategy.".format(len(self.row_buffer)))
         self.flush_data(self.row_buffer)
         logger.info("Logging out.")
+        self.session.publish_upload_session()
+        self.session.upload_session_publish_status()
         response = self.session.get(url=self.base_url+"/auth/logout")
         logger.info("Logout returned status {}".format(response.status_code))
 
     def flush_data(self, rows):
         try:
-            # self.session.upload_multiple_rows(
-            #     rows,
-            #     self.project_id,
-            #     self.dataset_id,
-            #     self.table_name,
-            #     self.schema,
-            #     self.dss_columns_types
-            # )
-            self.session.update_dataset(
-                rows,
-                self.project_id,
-                self.dataset_id,
-                self.table_name,
-                self.schema,
-                self.dss_columns_types,
-                update_policy='add')
+            self.session.upload_session_push_rows(rows)
         except Exception as error_message:
             logger.exception("Dataset update issue: {}".format(error_message))
             raise error_message

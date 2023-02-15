@@ -22,10 +22,6 @@ def do(payload, config, plugin_config, inputs):
     parameter_name = payload.get('parameterName')
     base_url = plugin_config.get("base_url", None)
     project_name = config["microstrategy_project"].get("project_name", None)
-    project_id = ""  # the project id, obtained through a later request
-    dataset_name = str(config.get("dataset_name", None)).replace(" (created by Dataiku DSS)", "") + " (created by Dataiku DSS)"
-    dataset_id = ""  # the dataset id, obtained at creation or on update
-    table_name = "dss_data"
     username = config.get("microstrategy_api", {}).get("username", None)
     password = config.get("microstrategy_api", {}).get("password", '')
 

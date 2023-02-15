@@ -13,6 +13,7 @@ logger = logging.getLogger()
 
 SEARCH_PATTERN_EXACT = 2
 OBJECT_TYPE_CUBE_DATASET = 3
+DSS_DATETIME_PATTERN = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
 class MstrSession(object):
@@ -23,20 +24,13 @@ class MstrSession(object):
         self.auth = None
         self.requests_verify = False
         self.generate_verbose_logs = generate_verbose_logs
-        auth_token, cookies = self.request_auth_token(username, password)
-        self.auth = MstrAuth(auth_token, cookies)
-
-    def request_auth_token(self, username, password):
-        url = "{}/auth/login".format(self.server_url)
-        data = {
-            "username": username,
-            "password": password,
-            "loginMode": 1
-        }
-        response = requests.post(url=url, data=data)
-        auth_token = response.headers.get("X-MSTR-AuthToken")
-        cookies = dict(response.cookies)
-        return auth_token, cookies
+        self.auth = MstrAuth(server_url, username, password)
+        self.upload_session_id = None
+        self.upload_session_dataset_id = None
+        self.upload_session_project_id = None
+        self.upload_session_table_name = None
+        self.upload_session_column_headers = None
+        self.upload_session_index = None
 
     def get(self, url=None, headers=None, params=None):
         headers = headers or {}
@@ -53,6 +47,11 @@ class MstrSession(object):
         response = requests.patch(url=url, headers=headers, json=json, verify=self.requests_verify, auth=self.auth)
         return response
 
+    def put(self, url=None, headers=None, json=None):
+        headers = headers or {}
+        response = requests.put(url=url, headers=headers, json=json, verify=self.requests_verify, auth=self.auth)
+        return response
+
     def update_dataset(self, rows, project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='replace', can_raise=True):
         url = "{}/datasets/{}/tables/{}".format(self.server_url, dataset_id, table_name)
         headers = self.build_headers(project_id, update_policy=update_policy)
@@ -61,13 +60,99 @@ class MstrSession(object):
         assert_response_ok(response, generate_verbose_logs=self.generate_verbose_logs, can_raise=can_raise)
         return response
 
-    # def upload_multiple_rows(self, rows, project_id, dataset_id, table_name, schema, dss_columns_types):
-    #     logger.info("upload_multiple_rows:Uploading {}".format(len(rows)))
-    #     response = self.update_dataset(rows, project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='add', can_raise=False)
-    #     if response.status_code == 500 and "Mismatch columns" in response.content:
-    #         logger.warning("Mismatch in column, reverting to row by row upload")
-    #         for row in rows:
-    #             response = self.update_dataset([row], project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='add', can_raise=False)
+    def open_upload_session(self, project_id, dataset_id, table_name, schema, dss_columns_types, update_policy='replace', can_raise=True):
+        logger.info("Requesting upload session id")
+        url = "{}/datasets/{}/uploadSessions".format(self.server_url, dataset_id)
+        headers = self.build_headers(project_id, update_policy=update_policy)
+        json = self.build_upload_session_json(table_name, schema)
+        response = self.post(url=url, headers=headers, json=json)
+        assert_response_ok(response, generate_verbose_logs=self.generate_verbose_logs, can_raise=can_raise)
+        json_response = safe_json_extract(response, {})
+        upload_session_id = json_response.get("uploadSessionId")
+        if upload_session_id:
+            logger.info("upload session id obtained: {}".format(upload_session_id))
+            self.upload_session_id = upload_session_id
+        elif can_raise:
+            raise ValueError("Could not obtain an upload session id")
+        self.upload_session_dataset_id = dataset_id
+        self.upload_session_project_id = project_id
+        self.upload_session_index = 1
+        self.upload_session_table_name = table_name
+        self.upload_session_dss_columns_types = dss_columns_types
+        return upload_session_id
+
+    def build_upload_session_json(self, table_name, schema):
+        columns = schema.get("columns", [])
+        column_headers = []
+        for column in columns:
+            column_name = column.get("name")
+            column_headers.append(column_name)
+
+        json = {
+            "tables": [
+                {
+                    "name": "{}".format(table_name),
+                    "updatePolicy": "REPLACE",
+                    "orientation": "ROW",
+                    "columnHeaders": column_headers
+                }
+            ]
+        }
+        self.upload_session_column_headers = column_headers
+        return json
+
+    def upload_session_push_rows(self, rows):
+        encoded_rows = self.encode_rows(rows)
+        url = "{}/datasets/{}/uploadSessions/{}".format(self.server_url, self.upload_session_dataset_id, self.upload_session_id)
+        headers = self.build_headers(self.upload_session_project_id)
+        data = {
+            "tableName": "{}".format(self.upload_session_table_name),
+            "index": self.upload_session_index,
+            "data": encoded_rows
+        }
+        self.upload_session_index = self.upload_session_index + 1
+        response = self.put(url=url, headers=headers, json=data)
+        assert_response_ok(response, context="adding a chunk during an upload session", generate_verbose_logs=self.generate_verbose_logs)
+        return response
+
+    def encode_rows(self, rows):
+        upload_rows = []
+        for row in rows:
+            upload_row = []
+            for header, item_type in zip(self.upload_session_column_headers, self.upload_session_dss_columns_types):
+                item_value = row.get(header)
+                value_type = type(item_value)
+                if item_type == "string":
+                    if type(item_value) != str:
+                        item_value = ""
+                elif item_type == "date":
+                    if value_type != pandas._libs.tslibs.timestamps.Timestamp:
+                        if not validate_date(item_value):
+                            item_value = None
+                    else:
+                        item_value = item_value.strftime(DSS_DATETIME_PATTERN)
+                elif item_type == "boolean":
+                    pass
+                upload_row.append(item_value)
+            upload_rows.append(upload_row)
+        encoded_rows = b64encode(json.dumps(upload_rows, separators=(',', ':')).encode('utf-8')).decode("utf-8")
+        return encoded_rows
+
+    def publish_upload_session(self):
+        url = "{}/datasets/{}/uploadSessions/{}/publish".format(self.server_url, self.upload_session_dataset_id, self.upload_session_id)
+        headers = self.build_headers(self.upload_session_project_id)
+        response = self.post(url=url, headers=headers)
+        assert_response_ok(response, context="publishing the upload session", generate_verbose_logs=self.generate_verbose_logs)
+        return response
+
+    def upload_session_publish_status(self):
+        url = "{}/datasets/{}/uploadSessions/{}/publishStatus".format(self.server_url, self.upload_session_dataset_id, self.upload_session_id)
+        headers = self.build_headers(self.upload_session_project_id)
+        response = self.get(url=url, headers=headers)
+        assert_response_ok(response, context="getting the session's publishing status", can_raise=False, generate_verbose_logs=self.generate_verbose_logs)
+        json_response = safe_json_extract(response)
+        logger.info("Publishing status is {}".format(json_response))
+        return json_response
 
     def get_project_list(self):
         url = "{}/projects".format(self.server_url)
@@ -163,7 +248,7 @@ class MstrSession(object):
         search_result = safe_json_extract(response)
         return search_result
 
-    def create_dataset(self, project_id, project_name, dataset_name, table_name, columns_names, columns_types, folder_id=None):
+    def create_dataset(self, project_id, dataset_name, table_name, columns_names, columns_types, folder_id=None):
         json = self.build_dataset_create_json(dataset_name, table_name, columns_names, columns_types, [], folder_id=folder_id)
         url = "{}/datasets".format(self.server_url)
         headers = self.build_headers(project_id)
@@ -288,7 +373,7 @@ def convert_rows_to_data(rows, columns_types):
                     if not validate_date(item_value):
                         item_value = None
                 else:
-                    item_value = item_value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    item_value = item_value.strftime(DSS_DATETIME_PATTERN)
             elif item_type == "boolean":
                 pass
             mstr_row[item_key] = item_value
