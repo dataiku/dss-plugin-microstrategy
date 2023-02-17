@@ -41,7 +41,10 @@ def request_auth_token(server_url, username, password):
     response = requests.post(url=url, data=data)
     status_code = response.status_code
     if status_code >= 400:
-        logger.error("Error {} while requesting auth token to {}".format(status_code, server_url))
+        error_message = "Error {} while requesting auth token to {}".format(status_code, server_url)
+        logger.error(error_message)
+        logger.error("dumping: {}".format(response.content))
+        raise Exception(error_message)
     auth_token = response.headers.get("X-MSTR-AuthToken")
     cookies = dict(response.cookies)
     if auth_token or cookies:
