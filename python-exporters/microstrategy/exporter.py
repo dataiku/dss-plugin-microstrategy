@@ -30,7 +30,7 @@ class CustomExporter(Exporter):
         """
         self.row_buffer = []
         self.buffer_size = 5000
-        logger.info("Starting MicroStrategy exporter v1.2.0-beta.1")
+        logger.info("Starting MicroStrategy exporter v1.2.0-beta.3")
         # Plugin settings
         self.base_url = plugin_config.get("base_url", None)
         self.project_name = config["microstrategy_project"].get("project_name", None)
