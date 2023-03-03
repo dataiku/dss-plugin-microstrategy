@@ -1,9 +1,6 @@
 import logging
-import requests
-import pandas as pd
-import numpy as np
-
-from mstrio import microstrategy
+from numpy import isnan
+from mstr_session import MstrSession
 
 import dataiku
 from dataiku.exporter import Exporter
@@ -37,7 +34,7 @@ class CustomExporter(Exporter):
         """
         self.row_buffer = []
         self.buffer_size = 5000
-        logger.info("Starting MicroStrategy exporter v1.1.1")
+        logger.info("Starting MicroStrategy exporter v1.2.0")
         # Plugin settings
         self.base_url = plugin_config.get("base_url", None)
         self.project_name = config["microstrategy_project"].get("project_name", None)
@@ -47,6 +44,10 @@ class CustomExporter(Exporter):
         self.table_name = "dss_data"
         self.username = config["microstrategy_api"].get("username", None)
         self.password = config["microstrategy_api"].get("password", '')
+        generate_verbose_logs = config.get("generate_verbose_logs", False)
+        self.upload_session_id = None
+        self.session = MstrSession(self.base_url, self.username, self.password, generate_verbose_logs=generate_verbose_logs)
+        self.project_id, self.folder_id = self.get_ui_browse_results(config)
 
         if not (self.username and self.base_url):
             logger.error('Connection params: {}'.format(
@@ -58,7 +59,17 @@ class CustomExporter(Exporter):
             )
             raise ValueError("username and base_url must be filled")
 
-        self.connection = microstrategy.Connection(base_url=self.base_url, username=self.username, password=self.password, project_name=self.project_name)
+    def get_ui_browse_results(self, config):
+        import json
+        folder_id = None
+        project_id = config.get("selected_project_id", None)
+        selected_folder_id = json.loads(config.get("selected_folder_id", "{}"))
+        folder_ids = selected_folder_id.get("ids")
+        if folder_ids:
+            folder_id = folder_ids[-1]
+        if config.get("destination", "my_reports") == "my_reports":
+            folder_id = None
+        return project_id, folder_id
 
     def open(self, schema):
         self.dss_columns_types = get_dss_columns_types(schema)
@@ -67,58 +78,31 @@ class CustomExporter(Exporter):
         # Prevent problems when reading int
         # If we don't use it too, the initialization of the cube does not have the same dtypes as the read data (in write_row)
         # and we get mismatchs when updating
-        if dtypes is not None:
-            new_dtypes = {}
-            for (key, value) in dtypes.items():
-                if value == np.int64 or value == np.int32:
-                    value = np.float64
-                new_dtypes[key] = value
-            dtypes = new_dtypes
-
-        if parse_dates_columns:
-            for date_column in parse_dates_columns:
-                date_column_name = self.schema[date_column]
-                dtypes[date_column_name] = 'datetime64[ns]'
-
-        logger.info("Will create mstr dataset with dtypes = %s" % dtypes)
-        self.dataframe = pd.DataFrame({k: pd.Series(dtype=dtypes[k]) for k in dtypes})
-
-        logger.info('Opening connection to mstr')
-        try:
-            self.connection.connect()
-        except Exception as error_message:
-            logger.exception("Connection to MicroStrategy failed.")
-            raise error_message
+        # if dtypes is not None:
 
         # Get a project list, search for our project in the list, get the project ID for future API calls.
-        response = requests.get(url=self.base_url+"/projects", headers={"X-MSTR-AuthToken": self.connection.auth_token}, cookies=self.connection.cookies)
-        assert_response_ok(response, context="searching project id")
-        try:
-            projects_list = response.json()
-        except Exception as error_message:
-            raise error_message
-        for project in projects_list:
-            if project["name"] == self.project_name:
-                self.project_id = project["id"]
-                break
-
         if not self.project_id:
-            raise ValueError("Project '{}' could not be found on this server.".format(self.project_name))
+            self.project_id = self.session.get_project_id(self.project_name)
 
-        self.dataset_id = self.get_dataset_id(self.project_id, self.dataset_name)
+        # Search for objects of type 3 (datasets/cubes) with the right name
+        logger.info("Searching for existing '{}' dataset in project '{}'.".format(self.dataset_name, self.project_id))
+        self.dataset_id = self.session.get_dataset_id(self.project_id, self.dataset_name, folder_id=self.folder_id)
 
+        # No result, create a new dataset
         if not self.dataset_id:
-            logger.info("Creating new dataset {}.".format(self.dataset_name))
-            try:
-                self.dataset_id, newTableId = self.connection.create_dataset(
-                    data_frame=self.dataframe, dataset_name=self.dataset_name, table_name=self.table_name
-                )
-            except Exception as error_message:
-                logger.exception("Dataset creation issue: {}".format(error_message))
-                raise error_message
+            logger.info("Creating dataset '{}'".format(self.dataset_name))
+            self.dataset_id = self.session.create_dataset(
+                self.project_id,
+                self.dataset_name,
+                self.table_name,
+                self.schema,
+                self.dss_columns_types,
+                self.folder_id
+            )
 
         # Replace data (drop existing) by sending the empty dataframe, with correct schema
-        self.connection.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='replace')
+        self.session.update_dataset([], self.project_id, self.dataset_id, self.table_name, self.schema, self.dss_columns_types, update_policy='replace')
+        self.upload_session_id = self.session.open_upload_session(self.project_id, self.dataset_id, self.table_name, schema, self.dss_columns_types, update_policy='replace', can_raise=True)
 
     def get_dataset_id(self, project_id, searched_dataset_name):
         dataset_id = None
@@ -152,19 +136,13 @@ class CustomExporter(Exporter):
     def write_row(self, row):
         row_dict = {}
         for (column_name, cell_value, dtype) in zip(self.schema, row, self.dss_columns_types):
-            if (not cell_value or (type(cell_value) == float and np.isnan(cell_value))) and dtype == 'string':
-                cell_value = ""
-            if (type(cell_value) == float and np.isnan(cell_value)) and dtype == 'boolean':
-                logger.error("Boolean column '{}' contains an empty cell".format(column_name))
-                raise ValueError(
-                    "There is an empty cell in the boolean column '{}'. ".format(column_name)
-                    + "Boolean columns can only contain true/false values."
-                )
+            if (type(cell_value) == float and isnan(cell_value)):
+                cell_value = None
             row_dict[column_name] = cell_value
         self.row_buffer.append(row_dict)
 
         if len(self.row_buffer) > self.buffer_size:
-            logger.info("Sending 5000 rows to MicroStrategy.")
+            logger.info("Sending {} rows to MicroStrategy.".format(self.buffer_size))
             self.flush_data(self.row_buffer)
             self.row_buffer = []
 
@@ -172,13 +150,14 @@ class CustomExporter(Exporter):
         logger.info("Sending {} final rows to MicroStrategy.".format(len(self.row_buffer)))
         self.flush_data(self.row_buffer)
         logger.info("Logging out.")
-        response = requests.get(url=self.base_url+"/auth/logout", headers={"X-MSTR-AuthToken": self.connection.auth_token}, cookies=self.connection.cookies)
+        self.session.publish_upload_session()
+        self.session.upload_session_publish_status()
+        response = self.session.get(url=self.base_url+"/auth/logout")
         logger.info("Logout returned status {}".format(response.status_code))
 
     def flush_data(self, rows):
-        self.dataframe = pd.DataFrame(rows)
         try:
-            self.connection.update_dataset(data_frame=self.dataframe, dataset_id=self.dataset_id, table_name=self.table_name, update_policy='add')
+            self.session.upload_session_push_rows(rows)
         except Exception as error_message:
             logger.exception("Dataset update issue: {}".format(error_message))
             raise error_message
