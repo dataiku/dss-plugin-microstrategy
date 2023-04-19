@@ -1,5 +1,9 @@
 # Changelog
 
+## [Version 1.2.1](https://github.com/dataiku/dss-plugin-microstrategy/releases/tag/v1.2.1) - Bugfix release - 2023-04-19
+
+- Updated code-env descriptor for DSS 12
+
 ## [Version 1.2.0](https://github.com/dataiku/dss-plugin-microstrategy/releases/tag/v1.2.0) - Bugfix and feature release - 2023-03-06
 
 - Fix upload of columns containing empty cells for multiple data types
