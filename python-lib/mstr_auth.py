@@ -39,6 +39,7 @@ class MstrAuth(requests.auth.AuthBase):
     def refresh_token(self):
         logger.info("Retrieving new auth token")
         self.auth_token, self.cookies = request_auth_token(self.server_url, self.username, self.password)
+        self.cookies_string = build_cookies_string(self.cookies)
         self.token_time_limit = get_epoch_time_now() + 3000  # 50 minutes in future
         logger.info("Estimated validity for new token: {}".format(self.token_time_limit))
 
