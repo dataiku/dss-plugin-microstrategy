@@ -1,6 +1,6 @@
 {
     "id": "microstrategy",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "meta": {
         "label": "Export to MicroStrategy",
         "description": "Export DSS datasets to MicroStrategy cubes.",
