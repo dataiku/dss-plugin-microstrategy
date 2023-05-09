@@ -18,7 +18,7 @@ class MstrAuth(requests.auth.AuthBase):
         self.token_time_limit = None
 
     def __call__(self, request):
-        if (not self.auth_token) or self.is_token_expired():
+        if (not self.auth_token):
             self.refresh_token()
         request.headers["X-MSTR-AuthToken"] = self.auth_token
         if self.cookies_string:
@@ -40,8 +40,11 @@ class MstrAuth(requests.auth.AuthBase):
         logger.info("Retrieving new auth token")
         self.auth_token, self.cookies = request_auth_token(self.server_url, self.username, self.password)
         self.cookies_string = build_cookies_string(self.cookies)
-        self.token_time_limit = get_epoch_time_now() + 3000  # 50 minutes in future
+        self.refresh_token_time_limit()
         logger.info("Estimated validity for new token: {}".format(self.token_time_limit))
+
+    def refresh_token_time_limit(self):
+        self.token_time_limit = get_epoch_time_now() + 3000  # 50 minutes in future
 
 
 def get_epoch_time_now():
@@ -61,7 +64,8 @@ def request_auth_token(server_url, username, password):
     data = {
         "username": username,
         "password": password,
-        "loginMode": 1
+        "loginMode": 1,
+        "applicationType": 35
     }
     logger.info("Requesting auth token to {}".format(server_url))
     response = requests.post(url=url, data=data)
