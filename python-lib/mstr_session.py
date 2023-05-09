@@ -132,6 +132,7 @@ class MstrSession(object):
         headers = self.build_headers(self.upload_session_project_id)
         response = self.put(url=url, headers=headers)
         assert_response_ok(response, context="renewing session", generate_verbose_logs=self.generate_verbose_logs, can_raise=False)
+        logger.info("Session renewed.")
         self.auth.refresh_token_time_limit()
 
     def encode_rows(self, rows):
