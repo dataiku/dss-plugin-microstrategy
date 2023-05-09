@@ -1,5 +1,5 @@
 import json
-from mstr_session import MstrSession
+from mstr_session import MstrSession, get_base_url
 
 
 def build_select_choices(choices=None):
@@ -20,7 +20,7 @@ def build_select_choices(choices=None):
 
 def do(payload, config, plugin_config, inputs):
     parameter_name = payload.get('parameterName')
-    base_url = plugin_config.get("base_url", None)
+    base_url = get_base_url(config, plugin_config)
     project_name = config["microstrategy_project"].get("project_name", None)
     username = config.get("microstrategy_api", {}).get("username", None)
     password = config.get("microstrategy_api", {}).get("password", '')

@@ -2,6 +2,7 @@ import logging
 import requests
 import json
 import pandas
+import time
 from base64 import b64encode
 from mstr_auth import MstrAuth
 from dateutil.parser import parse
@@ -18,6 +19,8 @@ DSS_DATETIME_PATTERN = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 class MstrSession(object):
     def __init__(self, server_url, username, password, generate_verbose_logs=False):
+        if not server_url:
+            raise Exception("No valid URL to the for Microstrategy server has been selected")
         self.server_url = parse_server_url(server_url)
         self.username = username
         self.password = password
@@ -29,8 +32,10 @@ class MstrSession(object):
         self.upload_session_dataset_id = None
         self.upload_session_project_id = None
         self.upload_session_table_name = None
+        self.upload_session_schema = None
         self.upload_session_column_headers = None
         self.upload_session_index = None
+        self.section_number = 0
 
     def get(self, url=None, headers=None, params=None):
         headers = headers or {}
@@ -78,6 +83,7 @@ class MstrSession(object):
         self.upload_session_project_id = project_id
         self.upload_session_index = 1
         self.upload_session_table_name = table_name
+        self.upload_session_schema = schema
         self.upload_session_dss_columns_types = dss_columns_types
         return upload_session_id
 
@@ -102,6 +108,7 @@ class MstrSession(object):
         return json
 
     def upload_session_push_rows(self, rows):
+        self.restart_upload_session_if_needed()
         encoded_rows = self.encode_rows(rows)
         url = "{}/datasets/{}/uploadSessions/{}".format(self.server_url, self.upload_session_dataset_id, self.upload_session_id)
         headers = self.build_headers(self.upload_session_project_id)
@@ -114,6 +121,19 @@ class MstrSession(object):
         response = self.put(url=url, headers=headers, json=data)
         assert_response_ok(response, context="adding a chunk during an upload session", generate_verbose_logs=self.generate_verbose_logs)
         return response
+
+    def restart_upload_session_if_needed(self):
+        if self.auth.is_token_expired():
+            logger.warn("Session is reaching timeout. Renewing session now.")
+            self.renew_session()
+
+    def renew_session(self):
+        url = "{}/sessions".format(self.server_url)
+        headers = self.build_headers(self.upload_session_project_id)
+        response = self.put(url=url, headers=headers)
+        assert_response_ok(response, context="renewing session", generate_verbose_logs=self.generate_verbose_logs, can_raise=False)
+        logger.info("Session renewed.")
+        self.auth.refresh_token_time_limit()
 
     def encode_rows(self, rows):
         upload_rows = []
@@ -148,9 +168,22 @@ class MstrSession(object):
     def upload_session_publish_status(self):
         url = "{}/datasets/{}/uploadSessions/{}/publishStatus".format(self.server_url, self.upload_session_dataset_id, self.upload_session_id)
         headers = self.build_headers(self.upload_session_project_id)
-        response = self.get(url=url, headers=headers)
-        assert_response_ok(response, context="getting the session's publishing status", can_raise=False, generate_verbose_logs=self.generate_verbose_logs)
-        json_response = safe_json_extract(response)
+        # {'status': 6, 'message': 'sql execution'}
+        status = None
+        json_response = None
+        number_of_retries = 0
+        while (status != 1) and (number_of_retries < 5):
+            response = self.get(url=url, headers=headers)
+            assert_response_ok(response, context="getting the session's publishing status", can_raise=False, generate_verbose_logs=self.generate_verbose_logs)
+            json_response = safe_json_extract(response)
+            status = json_response.get("status")
+            message = json_response.get("message")
+            if (not status) and message:
+                raise Exception("Error: {}".format(message))
+            if status != 1:
+                number_of_retries += 1
+                logger.error("{}".format(json_response))
+                time.sleep(2)
         logger.info("Publishing status is {}".format(json_response))
         return json_response
 
@@ -313,6 +346,7 @@ class MstrSession(object):
 
     def build_headers(self, project_id, update_policy=None):
         headers = {
+            "accept-encoding": "gzip,deflate",
             "X-MSTR-ProjectID": project_id,
         }
         if update_policy:
@@ -402,10 +436,11 @@ def assert_response_ok(response, context=None, can_raise=True, generate_verbose_
                 error_message += ". " + json_content
             logger.error(error_message)
             logger.error(content)
-    if error_message and can_raise:
+    if error_message:
         if generate_verbose_logs:
             logger.error("last requests url={}, body={}".format(response.request.url, response.request.body))
-        raise Exception(error_message)
+        if can_raise:
+            raise Exception(error_message)
     return error_message
 
 
@@ -428,3 +463,10 @@ def validate_date(date_text):
     except Exception:
         return False
     return True
+
+
+def get_base_url(config, plugin_config):
+    microstrategy_api = config.get("microstrategy_api", {})
+    override_url = microstrategy_api.get("override_url")
+    base_url = plugin_config.get("base_url", None)
+    return override_url or base_url
