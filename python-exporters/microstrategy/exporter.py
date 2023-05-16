@@ -1,6 +1,6 @@
 import logging
 from numpy import isnan
-from mstr_session import MstrSession
+from mstr_session import MstrSession, get_base_url
 
 import dataiku
 from dataiku.exporter import Exporter
@@ -30,9 +30,9 @@ class CustomExporter(Exporter):
         """
         self.row_buffer = []
         self.buffer_size = 5000
-        logger.info("Starting MicroStrategy exporter v1.2.1")
+        logger.info("Starting MicroStrategy exporter v1.3.0")
         # Plugin settings
-        self.base_url = plugin_config.get("base_url", None)
+        self.base_url = get_base_url(config, plugin_config)
         self.project_name = config["microstrategy_project"].get("project_name", None)
         self.project_id = ""  # the project id, obtained through a later request
         self.dataset_name = str(config.get("dataset_name", None)).replace(" (created by Dataiku DSS)", "") + " (created by Dataiku DSS)"
