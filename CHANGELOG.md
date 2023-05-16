@@ -4,6 +4,10 @@
 
 - Add URL selector in the credential preset
 
+## [Version 1.2.2](https://github.com/dataiku/dss-plugin-microstrategy/releases/tag/v1.2.2) - Feature release - 2023-04-19
+
+- Add URL selector in the credential preset, DSS 11
+
 ## [Version 1.2.1](https://github.com/dataiku/dss-plugin-microstrategy/releases/tag/v1.2.1) - Bugfix release - 2023-04-19
 
 - Updated code-env descriptor for DSS 12
