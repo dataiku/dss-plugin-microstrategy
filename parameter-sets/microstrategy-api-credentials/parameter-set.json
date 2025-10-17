@@ -1,0 +1,32 @@
+{
+    "meta" : {
+        "label": "MicroStrategy API credentials",
+        "icon": "icon-forward"
+    },
+    "defaultDefinableInline": true,
+    "defaultDefinableAtProjectLevel": false,
+    "pluginParams": [
+    ],
+    "params": [
+        {
+            "name": "username",
+            "label": "Username",
+            "description": "MicroStrategy username",
+            "type": "STRING",
+            "mandatory" : true
+        },
+        {
+            "name": "password",
+            "label": "Password",
+            "description": "MicroStrategy password",
+            "type": "PASSWORD",
+            "mandatory" : false
+        },
+        {
+            "name": "override_url",
+            "label": "MicroStrategy API URL",
+            "type": "STRING",
+            "description": "(Optional) This URL overrides what is defined in the plugin's parameters section. It must end with \"/MicroStrategyLibrary/api\""
+        }
+    ]
+}

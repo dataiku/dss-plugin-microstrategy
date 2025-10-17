@@ -1,0 +1,20 @@
+{
+    "meta" : {
+        "label": "MicroStrategy project",
+        "description": "MicroStrategy projects that can be used by the exporter.",
+        "icon": "icon-forward"
+    },
+    "defaultDefinableInline": false,
+    "defaultDefinableAtProjectLevel": true,
+    "pluginParams": [
+    ],
+    "params": [
+        {
+            "name": "project_name",
+            "label": "MicroStrategy project Name",
+            "description": "",
+            "type": "STRING",
+            "mandatory" : true
+        }
+    ]
+}
