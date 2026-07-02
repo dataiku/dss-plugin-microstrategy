@@ -1,5 +1,9 @@
 # Changelog
 
+## [Version 1.4.0](https://github.com/dataiku/dss-plugin-microstrategy/releases/tag/v1.4.0) - Feature release - 2026-07-02
+
+- Adding a SSO OAuth preset
+
 ## [Version 1.3.0](https://github.com/dataiku/dss-plugin-microstrategy/releases/tag/v1.3.0) - Feature release - 2023-04-19
 
 - Add URL selector in the credential preset
