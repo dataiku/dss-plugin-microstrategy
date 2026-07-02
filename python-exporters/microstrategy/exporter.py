@@ -1,6 +1,7 @@
 import logging
 from numpy import isnan
 from mstr_session import MstrSession, get_base_url
+from mstr_common import get_connection_from_config
 
 import dataiku
 from dataiku.exporter import Exporter
@@ -30,7 +31,7 @@ class CustomExporter(Exporter):
         """
         self.row_buffer = []
         self.buffer_size = 5000
-        logger.info("Starting MicroStrategy exporter v1.3.0")
+        logger.info("Starting MicroStrategy exporter v1.3.0-beta.1")
         # Plugin settings
         self.base_url = get_base_url(config, plugin_config)
         self.project_name = config["microstrategy_project"].get("project_name", None)
@@ -38,18 +39,17 @@ class CustomExporter(Exporter):
         self.dataset_name = str(config.get("dataset_name", None)).replace(" (created by Dataiku DSS)", "") + " (created by Dataiku DSS)"
         self.dataset_id = ""  # the dataset id, obtained at creation or on update
         self.table_name = "dss_data"
-        self.username = config["microstrategy_api"].get("username", None)
-        self.password = config["microstrategy_api"].get("password", '')
+        username, password, auth_token = get_connection_from_config(config)
         generate_verbose_logs = config.get("generate_verbose_logs", False)
         self.upload_session_id = None
-        self.session = MstrSession(self.base_url, self.username, self.password, generate_verbose_logs=generate_verbose_logs)
+        self.session = MstrSession(self.base_url, username, password, auth_token=auth_token, generate_verbose_logs=generate_verbose_logs)
         self.project_id, self.folder_id = self.get_ui_browse_results(config)
 
         if not (self.username and self.base_url):
             logger.error('Connection params: {}'.format(
                 {
-                    'username:': self.username,
-                    'password:': '#' * len(self.password),
+                    'username:': username,
+                    'password:': '#' * len(password),
                     'base_url:': self.base_url
                 })
             )

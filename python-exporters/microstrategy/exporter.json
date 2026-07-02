@@ -16,11 +16,30 @@
 
     "params": [
         {
+            "name": "auth_type",
+            "label": "Authentication type",
+            "description": "",
+            "type": "SELECT",
+            "defaultValue": null,
+            "selectChoices":[
+                {"value": null, "label": "Username / password"},
+                {"value": "oauth", "label": "SSO"}
+            ]
+        },
+        {
             "name": "microstrategy_api",
             "label": "MicroStrategy API credentials",
             "description": "",
             "type": "PRESET",
-            "parameterSetId": "microstrategy-api-credentials"
+            "parameterSetId": "microstrategy-api-credentials",
+            "visibilityCondition": "model.auth_type == null"
+        },
+        {
+            "name": "microstrategy_sso",
+            "label": "SSO preset (token rotation)",
+            "type": "PRESET",
+            "parameterSetId": "microstrategy-sso-credentials",
+            "visibilityCondition": "model.auth_type == 'oauth'"
         },
         {
             "name": "microstrategy_project",

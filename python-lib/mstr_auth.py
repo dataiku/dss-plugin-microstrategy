@@ -7,8 +7,9 @@ logger = logging.getLogger()
 
 
 class MstrAuth(requests.auth.AuthBase):
-    def __init__(self, server_url, username, password):
-        auth_token, cookies = request_auth_token(server_url, username, password)
+    def __init__(self, server_url, username, password, auth_token=None):
+        if auth_token is None:
+            auth_token, cookies = request_auth_token(server_url, username, password)
         self.auth_token = auth_token
         self.cookies = cookies
         self.cookies_string = None

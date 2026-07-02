@@ -17,7 +17,7 @@ DSS_DATETIME_PATTERN = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
 class MstrSession(object):
-    def __init__(self, server_url, username, password, generate_verbose_logs=False):
+    def __init__(self, server_url, username, password, auth_token=None, generate_verbose_logs=False):
         if not server_url:
             raise Exception("No valid URL to the for Microstrategy server has been selected")
         self.server_url = parse_server_url(server_url)
@@ -26,7 +26,7 @@ class MstrSession(object):
         self.auth = None
         self.requests_verify = False
         self.generate_verbose_logs = generate_verbose_logs
-        self.auth = MstrAuth(server_url, username, password)
+        self.auth = MstrAuth(server_url, username, password, auth_token)
         self.upload_session_id = None
         self.upload_session_dataset_id = None
         self.upload_session_project_id = None
@@ -433,7 +433,11 @@ def validate_date(date_text):
 
 
 def get_base_url(config, plugin_config):
-    microstrategy_api = config.get("microstrategy_api", {})
-    override_url = microstrategy_api.get("override_url")
+    auth_type = config.get("auth_type")
+    if auth_type == "oauth":
+        connection_details = config.get("microstrategy_sso", {})
+    else:
+        connection_details = config.get("microstrategy_api", {})
+    override_url = connection_details.get("override_url")
     base_url = plugin_config.get("base_url", None)
     return override_url or base_url
