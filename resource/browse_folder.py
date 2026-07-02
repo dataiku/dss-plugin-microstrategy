@@ -1,5 +1,6 @@
 import json
 from mstr_session import MstrSession, get_base_url
+from mstr_common import get_connection_from_config
 
 
 def build_select_choices(choices=None):
@@ -22,11 +23,10 @@ def do(payload, config, plugin_config, inputs):
     parameter_name = payload.get('parameterName')
     base_url = get_base_url(config, plugin_config)
     project_name = config["microstrategy_project"].get("project_name", None)
-    username = config.get("microstrategy_api", {}).get("username", None)
-    password = config.get("microstrategy_api", {}).get("password", '')
+    username, password, auth_token = get_connection_from_config(config)
 
     if parameter_name == "selected_project_id":
-        session = MstrSession(base_url, username, password)
+        session = MstrSession(base_url, username, password, auth_token=auth_token)
         projects = session.get_projects()
         choices = []
         for project in projects:
@@ -43,7 +43,7 @@ def do(payload, config, plugin_config, inputs):
         saved_structure = json.loads(config.get("selected_folder_id", "{}"))
         selected_folder_name = saved_structure.get("names", [])
         selected_folder_id = saved_structure.get("ids", [])
-        session = MstrSession(base_url, username, password)
+        session = MstrSession(base_url, username, password, auth_token=auth_token)
         if project_name:
             selected_project_id = session.get_project_id(project_name)
         if not selected_folder_id:

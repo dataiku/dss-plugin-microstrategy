@@ -1,0 +1,51 @@
+{
+    "meta" : {
+        "label": "MicroStrategy SSO credentials",
+        "icon": "icon-forward"
+    },
+    "defaultDefinableInline": false,
+    "defaultDefinableAtProjectLevel": false,
+    "pluginParams": [
+    ],
+    "params": [
+        {
+            "name": "auth_token",
+            "type": "CREDENTIAL_REQUEST",
+            "label": "Single Sign On",
+            "credentialRequestSettings": {
+                "type": "OAUTH2",
+                "authorizationEndpoint": " ",
+                "tokenEndpoint": " ",
+                "scope": " ",
+                "refreshTokenRotation": true
+            }
+        },
+        {
+            "name": "authorizationEndpoint",
+            "label": "Authorization endpoint",
+            "type": "STRING",
+            "description": "",
+            "mandatory": false
+        },
+        {
+            "name": "tokenEndpoint",
+            "label": "Token endpoint",
+            "type": "STRING",
+            "description": "",
+            "mandatory": false
+        },
+        {
+            "name": "scope",
+            "label": "Scope",
+            "type": "STRING",
+            "description": "",
+            "mandatory": false
+        },
+        {
+            "name": "override_url",
+            "label": "MicroStrategy API URL",
+            "type": "STRING",
+            "description": "(Optional) This URL overrides what is defined in the plugin's parameters section. It must end with \"/MicroStrategyLibrary/api\""
+        }
+    ]
+}
